@@ -1,0 +1,223 @@
+Perfecto ✅
+Aquí tienes el backend Java final listo para producción con Spring Boot + DL4J + Word2Vec, totalmente funcional para que lo subas a GitHub y lo uses con el modelo modelo.zip y los embeddings word2vec.txt que entrenaste antes.
+
+Este backend:
+
+    Carga el modelo neuronal (modelo.zip).
+    Carga los embeddings (word2vec.txt).
+    Convierte el texto recibido en un vector usando Word2Vec.
+    Clasifica el texto y devuelve la categoría.
+    Está listo para integrarse con tu frontend React.
+
+1. Estructura del proyecto
+
+backend-java/
+├── pom.xml
+└── src/
+    └── main/
+        ├── java/com/example/ia/
+        │   ├── AIService.java
+        │   ├── AIController.java
+        │   └── BackendIaApplication.java
+        └── resources/
+            ├── application.properties
+            ├── modelo.zip
+            └── word2vec.txt
+
+2. pom.xml
+
+Xml
+<project xmlns="http://maven.apache.org/POM/4.0.0" ...>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>backend-ia</artifactId>
+    <version>1.0.0</version>
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- DL4J Core -->
+        <dependency>
+            <groupId>org.deeplearning4j</groupId>
+            <artifactId>deeplearning4j-core</artifactId>
+            <version>1.0.0-M2.1</version>
+        </dependency>
+
+        <!-- ND4J Backend CPU -->
+        <dependency>
+            <groupId>org.nd4j</groupId>
+            <artifactId>nd4j-native-platform</artifactId>
+            <version>1.0.0-M2.1</version>
+        </dependency>
+
+        <!-- NLP y Word2Vec -->
+        <dependency>
+            <groupId>org.deeplearning4j</groupId>
+            <artifactId>deeplearning4j-nlp</artifactId>
+            <version>1.0.0-M2.1</version>
+        </dependency>
+
+        <!-- Apache Commons -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.12.0</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+3. BackendIaApplication.java
+
+Java
+package com.example.ia;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class BackendIaApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(BackendIaApplication.class, args);
+    }
+}
+
+4. AIService.java
+
+Java
+package com.example.ia;
+
+import org.apache.commons.lang3.StringUtils;
+import org.deeplearning4j.models.embeddings.loader.WordVectorSerializer;
+import org.deeplearning4j.models.embeddings.wordvectors.WordVectors;
+import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
+import org.deeplearning4j.util.ModelSerializer;
+import org.nd4j.linalg.api.ndarray.INDArray;
+import org.springframework.stereotype.Service;
+
+import java.io.File;
+
+@Service
+public class AIService {
+
+    private final MultiLayerNetwork model;
+    private final WordVectors wordVectors;
+
+    public AIService() {
+        try {
+            // Cargar modelo neuronal entrenado
+            File modelFile = new File("src/main/resources/modelo.zip");
+            if (!modelFile.exists()) {
+                throw new RuntimeException("No se encontró modelo.zip en resources");
+            }
+            model = ModelSerializer.restoreMultiLayerNetwork(modelFile);
+
+            // Cargar embeddings Word2Vec
+            File vecFile = new File("src/main/resources/word2vec.txt");
+            if (!vecFile.exists()) {
+                throw new RuntimeException("No se encontró word2vec.txt en resources");
+            }
+            wordVectors = WordVectorSerializer.readWord2VecModel(vecFile);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error cargando IA: " + e.getMessage(), e);
+        }
+    }
+
+    public String clasificarTexto(String texto) {
+        try {
+            INDArray features = fraseAEmbedding(texto);
+            INDArray output = model.output(features);
+            int clase = output.argMax(1).getInt(0);
+
+            return switch (clase) {
+                case 0 -> "Positivo";
+                case 1 -> "Negativo";
+                case 2 -> "Neutral";
+                default -> "Desconocido";
+            };
+        } catch (Exception e) {
+            return "Error procesando texto: " + e.getMessage();
+        }
+    }
+
+    private INDArray fraseAEmbedding(String frase) {
+        String[] tokens = StringUtils.split(frase.toLowerCase());
+        INDArray sum = org.nd4j.linalg.factory.Nd4j.zeros(wordVectors.lookupTable().layerSize());
+        int count = 0;
+        for (String token : tokens) {
+            if (wordVectors.hasWord(token)) {
+                sum.addi(wordVectors.getWordVectorMatrix(token));
+                count++;
+            }
+        }
+        return count > 0 ? sum.div(count) : sum;
+    }
+}
+
+5. AIController.java
+
+Java
+package com.example.ia;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/ia")
+public class AIController {
+
+    private final AIService aiService;
+
+    public AIController(AIService aiService) {
+        this.aiService = aiService;
+    }
+
+    @PostMapping("/clasificar")
+    public String clasificar(@RequestBody String texto) {
+        return aiService.clasificarTexto(texto);
+    }
+}
+
+6. application.properties
+
+Properties
+server.port=8080
+
+7. Instrucciones para subir a GitHub
+
+    Copia modelo.zip y word2vec.txt generados por el entrenamiento a src/main/resources/.
+    Desde la carpeta backend-java:
+
+    Bash
+    git init
+    git add .
+    git commit -m "Backend IA local con Word2Vec"
+    git branch -M main
+    git remote add origin https://github.com/TU_USUARIO/backend-ia.git
+    git push -u origin main
+
+    Para ejecutar:
+
+    Bash
+    mvn spring-boot:run
+
+    Endpoint disponible:
+
+    POST http://localhost:8080/api/ia/clasificar
+
+
